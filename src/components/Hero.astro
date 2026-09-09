@@ -123,6 +123,10 @@ const heroSrcSet = heroImageResult?.srcSet?.attribute || undefined;
     z-index: 1;
     color: var(--color-bg-main);
     padding-block: var(--space-xl) var(--space-lg);
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
   }
   .hero-badge {
     display: inline-block;
@@ -174,6 +178,7 @@ const heroSrcSet = heroImageResult?.srcSet?.attribute || undefined;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-soft);
     margin-bottom: var(--space-md);
+    align-self: flex-end;
   }
   .hero-price-label {
     font-size: 0.8rem;
@@ -190,6 +195,7 @@ const heroSrcSet = heroImageResult?.srcSet?.attribute || undefined;
     gap: 8px;
     margin-top: 4px;
     flex-wrap: wrap;
+    justify-content: flex-end;
   }
   .promo-chip {
     background: var(--color-gold-soft);
@@ -204,12 +210,14 @@ const heroSrcSet = heroImageResult?.srcSet?.attribute || undefined;
     flex-wrap: wrap;
     gap: var(--space-md);
     margin-bottom: var(--space-md);
+    justify-content: flex-end;
   }
   .stat {
     display: flex;
     flex-direction: column;
     font-size: 0.85rem;
     color: color-mix(in srgb, var(--color-bg-main) 85%, transparent);
+    text-align: right;
   }
   .stat strong {
     font-size: 1.1rem;
