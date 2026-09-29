@@ -1,0 +1,162 @@
+# Alur Kerja Website PKP2 Extension
+
+Dokumen ini menjelaskan alur data, build, publikasi, dan otomasi website berdasarkan source repo, workflow GitHub Actions, serta sembilan file Google Apps Script yang diberikan. Ini adalah dokumentasi kondisi saat ini; bukan perubahan konfigurasi atau kode.
+
+## Ringkasan arsitektur
+
+```text
+Google Sheets + Google Docs + Google Drive
+                  │
+                  ▼
+          Google Apps Script Web App
+       API data + pemrosesan URL Drive
+                  │
+        saat proses build, bukan saat
+        pengunjung membuka website
+                  ▼
+          Astro static site build
+                  │
+                  ▼
+      GitHub Actions → GitHub Pages
+                  │
+                  ▼
+          purikencanapermai2.com
+```
+
+Website menggunakan **static site generation (SSG)**. Astro meminta data dari Apps Script ketika build berjalan dan menghasilkan file HTML statis. Pengunjung tidak meminta data dari Apps Script secara langsung saat membuka halaman. Karena itu, perubahan di spreadsheet baru terlihat setelah website dibangun dan dideploy lagi.
+
+## Sumber dan bentuk data
+
+Spreadsheet mempunyai tab yang dirujuk oleh konfigurasi GAS:
+
+| Tab | Peran | Bentuk data utama |
+| --- | --- | --- |
+| `Content` | Konten dan konfigurasi global proyek | Pasangan `key`–`value`, satu pengaturan per baris |
+| `Units` | Data unit rumah | Satu baris per unit; header baris pertama menjadi nama field |
+| `Gallery` | Foto hero, unit, fasilitas, progress, dan kategori lain | Satu baris per gambar, termasuk kategori dan link Drive |
+| `Articles` | Metadata dan jadwal artikel | Satu baris per artikel; body artikelnya diambil dari Google Docs |
+| `Testimonials` | Testimoni | Satu baris per testimoni; tab ini opsional di GAS |
+
+### Contoh field yang digunakan
+
+**Content** mencakup antara lain `hero_title`, `hero_subtitle`, `price_from`, `whatsapp_number`, `maps_link`, `about_description`, `company_name`, `meta_title`, `meta_description`, `siteplan`, `video`, `pillar_slug`, `trust_points_*`, `faq_home_*`, dan `spec_*`. Sejumlah nilai list memakai format teks seperti `Judul::Isi`.
+
+**Units** dibaca sebagai object per baris. Komponen situs menggunakan field seperti `id`, `kode_unit`, `tipe`, `status`, `harga`, `luas_tanah`, `luas_bangunan`, `kamar`, dan `deskripsi`. Pilihan status yang ditetapkan GAS adalah `Available`, `Sold`, `Ready Unit`, dan `Progress (Ready Stock)`; ejaan status perlu konsisten dengan dropdown dan kode tampilan.
+
+**Gallery** memakai `id`, `kategori`, `unit_id`, `urutan`, `caption`, dan `drive_link`. GAS mengembalikan antara lain `image_url`, `thumbnail_url`, dan `file_id`. Foto unit dicocokkan melalui `unit_id`/`kode_unit`.
+
+**Articles** memakai `id`, `title`, `slug`, `published_at`, `cover_drive_link`, `doc_url`, `meta_title`, `meta_description`, `tags`, `related_units`, dan `faq`. GAS mengambil isi artikel HTML dari dokumen yang sudah dipublikasikan ke web. `Testimonials` difilter agar hanya baris dengan `id`, `name`, dan `text` yang dikirim.
+
+## Alur Apps Script
+
+### API untuk build
+
+`api.gs` menyediakan `doGet(e)` dengan action berikut:
+
+- `content`, `units`, `gallery`, `articles`, `testimonials`: mengambil satu kelompok data.
+- `article&slug=...`: mengambil artikel lengkap berdasarkan slug.
+- `all`: mengambil data global dalam satu request, termasuk `generated_at`.
+
+Repo Astro memakai action `all` untuk halaman utama dan daftar artikel; halaman artikel juga mengambil konten lengkap menggunakan action `article`.
+
+Saat ini `REQUIRE_BUILD_TOKEN` bernilai `false`, sehingga pemeriksaan `BUILD_TOKEN` tidak aktif. API perlu dianggap dapat diakses publik. Data yang dikirim ke website memang konten publik; jangan meletakkan rahasia atau data pribadi di tab yang dibaca API.
+
+### Artikel terjadwal
+
+`getArticles()` dan `getArticleBySlug()` hanya menyertakan artikel jika `published_at` sudah tiba (`published_at <= waktu saat API dijalankan`). Artikel masa depan belum dibuat saat build. Build berikutnya setelah tanggal publikasi akan memasukkannya.
+
+### Google Docs dan cache
+
+`docservice.gs` mengambil HTML dari URL `doc_url`, membersihkan tag `style` dan `script`, lalu menyimpan hasil sementara melalui `CacheService` selama 30 menit. URL yang dipakai perlu berupa dokumen yang sudah **Publish to web**. Jika pengambilan gagal, fungsi mengembalikan HTML fallback, bukan melempar error ke pemanggil.
+
+### Gambar Google Drive
+
+`drive.gs` dan `imageservice.gs` mengubah link Drive menjadi URL yang dapat dipakai build Astro. `getImageUrl()` dan `resolveGalleryItem()` memanggil `ensurePublicAccess()`, yang dapat mengubah sharing file menjadi **Anyone with the link – Viewer**. Dengan demikian, pemanggilan API untuk gambar bukan hanya membaca data: ia bisa mengubah izin berbagi file. Gunakan hanya untuk media yang memang boleh dipublikasikan.
+
+GAS menyediakan URL download dan thumbnail. Pengolahan ukuran/format gambar dilakukan Astro pada waktu build; `safeImage()` menangani kegagalan foto per item agar satu foto rusak tidak langsung menggagalkan seluruh build.
+
+## Alur publikasi
+
+### Build manual dari spreadsheet
+
+1. Admin memilih **⚙️ Website Tools → ⚡ Trigger Build Sekarang**.
+2. `triggerManualBuild()` memanggil `triggerGithubAction()`.
+3. GAS membaca `GITHUB_TOKEN` dari **Script Properties**.
+4. GAS mengirim GitHub REST API `workflow_dispatch` ke repo `iqbalrachman2905/pkp2-extension-version2`, workflow `deploy.yml`, ref `main`.
+5. GitHub Actions menjalankan `npm install`, `npm run build`, mengunggah artifact, lalu deploy ke GitHub Pages.
+
+Respons sukses dari endpoint dispatch (umumnya HTTP `204`) berarti GitHub menerima permintaan untuk memulai workflow. Itu **belum membuktikan** build dan deploy akhirnya sukses. Hasil akhir perlu diperiksa di tab Actions GitHub.
+
+### Build terjadwal
+
+`cronBuildWebsite()` hanya memanggil `triggerGithubAction()`. Setiap build harian mengambil data terbaru dan dapat membuat artikel yang tanggal publikasinya sudah tiba menjadi halaman statis.
+
+Konfigurasi source yang diberikan saat ini adalah:
+
+```js
+const DAILY_CRON_HOUR = 2;
+const DAILY_CRON_MINUTE = 0;
+```
+
+`setupDailyWebsiteCron()` memasang trigger dengan `.everyDays(1).atHour(2).nearMinute(0)`. Jadi jadwal yang diminta source adalah **sekitar pukul 02.00**, berdasarkan timezone project Apps Script; bukan tengah malam. `nearMinute()` tidak menjamin eksekusi tepat pada menit yang ditulis.
+
+Fungsi setup terlebih dahulu menghapus trigger lama yang handler-nya `cronBuildWebsite`, lalu membuat trigger baru. Nilai di source tidak cukup untuk memastikan trigger yang saat ini terpasang: jadwal aktual perlu dicek pada halaman **Triggers** Apps Script. Jika pengaturan jam diubah, trigger perlu dipasang ulang agar memakai konfigurasi baru.
+
+Timezone yang digunakan berasal dari **Apps Script project settings** (`Session.getScriptTimeZone()`), bukan otomatis dari jam komputer admin. Periksa timezone itu saat membandingkan waktu trigger dengan waktu Jakarta.
+
+### Edit spreadsheet
+
+`onEdit(e)` hanya membuat ID dan slug yang belum ada pada baris terkait. Komentarnya secara eksplisit menyebut bahwa edit **tidak** memicu GitHub build. Untuk langsung menerbitkan perubahan lain di Sheet, gunakan menu build manual; jika tidak, perubahan akan ikut pada build berikutnya.
+
+## Peran sembilan file GAS
+
+| File | Tanggung jawab |
+| --- | --- |
+| `api.gs` | Endpoint Web App, pembacaan tab, serialisasi data, filter/jadwal artikel |
+| `config.gs` | Spreadsheet ID, nama tab, status unit, opsi token, repo/workflow/branch, jam cron |
+| `docservice.gs` | Mengambil dan membersihkan HTML artikel dari Google Docs; cache sementara |
+| `drive.gs` | Izin publik file, URL download/thumbnail, utilitas memperbaiki izin media |
+| `imageservice.gs` | Mengubah link Drive menjadi object gambar untuk API |
+| `main.gs` | Menu spreadsheet, backfill ID/slug, tombol build manual |
+| `trigger.gs` | `onEdit`, dispatch workflow GitHub, cron harian, token dari Script Properties |
+| `utils.gs` | Ekstraksi ID Drive, slug unik, ID berikutnya, konversi tanggal ISO |
+| `testoken.gs` | Pemeriksaan dasar akses `GITHUB_TOKEN` ke repository GitHub |
+
+## Deployment website
+
+Workflow `.github/workflows/deploy.yml` memiliki pemicu:
+
+- push ke branch `main`;
+- `workflow_dispatch` (pemicu yang dipanggil GAS saat ini, juga tersedia untuk dijalankan manual di GitHub);
+- `repository_dispatch` dengan tipe `manual-publish`.
+
+Workflow membangun folder `dist` Astro dan mengirimkannya ke GitHub Pages. Konfigurasi alamat utama website terdapat di `astro.config.mjs` (`site`). API Apps Script yang dipakai build dikonfigurasi di `src/lib/api.js`.
+
+## Pemeriksaan jika website tidak ter-update
+
+| Gejala | Yang perlu diperiksa |
+| --- | --- |
+| Tidak ada eksekusi cron pada jadwal yang diharapkan | Halaman **Triggers**, handler yang terpasang, timezone project, dan apakah setup cron sudah dijalankan |
+| Cron berjalan tetapi build tidak mulai | Log eksekusi GAS; pastikan Script Property `GITHUB_TOKEN` tersedia dan respons GitHub bukan error |
+| `testGitHubToken()` sukses tetapi dispatch gagal | Tes tersebut hanya memeriksa akses repo; periksa izin token untuk menjalankan workflow dan body respons dispatch di log |
+| GAS mencatat HTTP sukses tetapi website tetap lama | Periksa run GitHub Actions sampai selesai; dispatch diterima tidak sama dengan build/deploy berhasil |
+| Perubahan Sheet tidak terlihat | `onEdit` tidak membangun situs; jalankan build manual atau tunggu build terjadwal |
+| Build gagal mengambil data | Periksa deployment Web App GAS, akses spreadsheet, nama tab, header, dan data yang dibutuhkan Astro |
+| Artikel belum muncul | Pastikan `published_at` sudah tiba, `slug` unik/terisi, dan `doc_url` dapat diakses sebagai Publish to web |
+| Foto hilang atau gagal diproses | Pastikan file Drive memang boleh publik, link valid, dan lihat log build Astro untuk foto yang dilewati |
+
+`triggerGithubAction()` menangkap kegagalan request dan mengembalikan object `{ success: false, ... }`; karena kegagalan tersebut tidak selalu dilempar sebagai exception, jangan hanya mengandalkan label status eksekusi GAS. Baca log eksekusi untuk melihat pesan dan kode HTTP. Sebaliknya, jika GAS mencatat dispatch sukses, periksa hasil workflow GitHub untuk menemukan kegagalan build/deploy.
+
+## Checklist duplikasi untuk proyek perumahan lain
+
+1. Salin spreadsheet dengan nama tab dan header yang kompatibel dengan kontrak data di atas.
+2. Ganti `SPREADSHEET_ID`, nama proyek, konten, unit, artikel, dan media sesuai proyek baru.
+3. Deploy Apps Script sebagai Web App dan arahkan repo proyek ke URL Web App tersebut.
+4. Simpan token GitHub sebagai Script Property `GITHUB_TOKEN`; jangan taruh nilainya di source atau Sheet. Berikan izin yang diperlukan untuk dispatch workflow.
+5. Perbarui `GITHUB_REPO`, `GITHUB_WORKFLOW`, `GITHUB_BRANCH`, dan jadwal/timezone trigger di project GAS.
+6. Perbarui `site` di `astro.config.mjs`, domain GitHub Pages, dan `API_URL` di `src/lib/api.js`.
+7. Cari dan sesuaikan teks yang masih tertanam di komponen, layout, metadata fallback, pesan WhatsApp, dan alt text. Repo saat ini masih memiliki beberapa teks khusus PKP2/Cibubur/Arciv Property di kode.
+8. Pastikan workflow, repository permissions, dan GitHub Pages aktif; uji build manual sebelum mengandalkan cron.
+9. Atur akses publik hanya untuk konten dan file gambar yang memang boleh ditampilkan di website.
+
+> **Catatan operasional:** konfigurasi GAS yang didokumentasikan di sini meminta cron sekitar pukul 02.00. Jika kebutuhan proyek adalah pukul 00.00, nilai jam di konfigurasi serta trigger yang benar-benar terpasang perlu diselaraskan. Dokumen ini tidak mengubah konfigurasi tersebut.
