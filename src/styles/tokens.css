@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Jost:wght@400;500;600&display=swap');
 
 /* ========================================================================= */
 /* 🟢 ZONE A — TEMA PROYEK (AI BOLEH UBAH NILAI DI SINI)                     */
@@ -6,28 +6,27 @@
 /* nama variabel (--nama-var), jangan tambah/hapus baris.                    */
 /* ========================================================================= */
 :root {
-  /* 1. WARNA BRAND (1 sumber kebenaran) */
-  --color-primary: #0f1724;       /* warna dominan: teks utama, elemen kuat */
-  --color-secondary: #c08b3a;     /* HANYA buat highlight: harga, badge, garis aksen */
-  
-  /* 2. BACKGROUND */
-  --color-bg-main: #FFFFFF;       /* background dasar website */
-  --color-bg-paper: #F6F5F4;      /* background section alternatif/kartu */
-  --color-scarcity: #DC2626;      /* background scarcity*/
-  
-  /* 3. TIPOGRAFI (Cocokkan dengan @import di atas) */
-  --font-display: 'Playfair Display', Georgia, serif;
-  --font-body: 'Poppins', -apple-system, sans-serif;
-  
-  /* 4. BENTUK (Radius corner) */
-  --radius-sm: 12px;
-  --radius-md: 20px;
-  --radius-lg: 28px;
-  
-  /* 5. KETEBALAN & INTENSITAS */
-  --border-width: 1px;
-  --shadow-intensity-soft: 10%;    /* dipakai shadow gede (modal, floating bar) */
-  --shadow-intensity-card: 6%;    /* dipakai shadow kecil (card, item) */
+/* 1. WARNA BRAND (1 sumber kebenaran) */
+--color-primary: #0F1F4B;       /* navy brosur; kontras vs #FFFFFF = 15.9:1 (lolos WCAG AA & AAA) */
+--color-secondary: #8F6A10;     /* antique gold lebih pekat & jenuh, beda jelas dari #B8935F (Progress); kontras vs putih ~5:1 */
+
+/* 2. BACKGROUND */
+--color-bg-main: #FFFFFF;       /* background dasar website */
+--color-bg-paper: #F7F3EB;      /* background section alternatif/kartu (krem hangat) */
+
+/* 3. TIPOGRAFI (Cocokkan dengan @import di atas) */
+--font-display: 'Cormorant Garamond', Georgia, serif;
+--font-body: 'Jost', -apple-system, sans-serif;
+
+/* 4. BENTUK (Radius corner) */
+--radius-sm: 12px;
+--radius-md: 20px;
+--radius-lg: 28px;
+
+/* 5. KETEBALAN & INTENSITAS */
+--border-width: 1px;
+--shadow-intensity-soft: 6%;    /* dipakai shadow gede (modal, floating bar) */
+--shadow-intensity-card: 4%;    /* dipakai shadow kecil (card, item) */
 }
 /* ================= END OF ZONE A ========================================= */
 
